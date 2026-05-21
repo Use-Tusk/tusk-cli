@@ -2,13 +2,46 @@
 
 This document lists all configuration options, defaults, environment overrides, and guidance. See [`docs/architecture.md`](architecture.md) for the end‑to‑end flow.
 
-Where the CLI reads config from:
+Where the CLI reads config from (highest precedence first):
 
 1. CLI flags (e.g., `--concurrency`, `--results-dir`, `--enable-service-logs`). See `--help` for each command for more details.
 2. Environment variables (prefix `TUSK_`)
-3. Config file (auto-discovered): `.tusk/config.yaml`, `.tusk/config.yml`, `tusk.yaml`, `tusk.yml`, or `~/.tusk/config.yaml`
+3. Explicit override file via `TUSK_CONFIG_OVERRIDE` env var (path to a YAML file)
+4. Local override file: `.tusk/local-config.yaml` or `.tusk/local-config.yml` (same directory as base config)
+5. Base config file (auto-discovered): `.tusk/config.yaml`, `.tusk/config.yml`, `tusk.yaml`, `tusk.yml`, or `~/.tusk/config.yaml`
 
 **✨ Run `tusk drift setup` in your service root directory to start an agent automatically create a config file based on your service.**
+
+## Local Config Overrides
+
+For local development, you can create a `.tusk/local-config.yaml` (or `.tusk/local-config.yml`) file alongside your base `.tusk/config.yaml`. This file is merged on top of the base config, so you only need to specify the fields you want to override.
+
+This is useful for local-only settings like disabling span export or changing the sampling mode without modifying the shared config file. **We recommend adding `.tusk/local-config.yaml` to your `.gitignore`.**
+
+Example `.tusk/local-config.yaml`:
+
+```yaml
+recording:
+  sampling:
+    mode: fixed
+    base_rate: 1.0
+  export_spans: false
+  enable_env_var_recording: false
+```
+
+You can also set `TUSK_CONFIG_OVERRIDE` to an explicit file path to load as an override (takes precedence over `local-config.yaml` but is still overridden by env vars).
+
+### Recording Environment Variable Overrides
+
+These env vars override the corresponding config keys regardless of what's in the config files:
+
+| Env var | Config key |
+|---------|-----------|
+| `TUSK_RECORDING_SAMPLING_MODE` | `recording.sampling.mode` |
+| `TUSK_RECORDING_SAMPLING_RATE` | `recording.sampling.base_rate` (+ legacy `recording.sampling_rate`) |
+| `TUSK_RECORDING_SAMPLING_LOG_TRANSITIONS` | `recording.sampling.log_transitions` |
+| `TUSK_RECORDING_EXPORT_SPANS` | `recording.export_spans` |
+| `TUSK_ENABLE_ENV_VAR_RECORDING` | `recording.enable_env_var_recording` |
 
 ## Service
 
