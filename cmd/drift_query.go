@@ -28,6 +28,9 @@ func init() {
 
 // setupDriftQueryCloud sets up the API client and resolves the service ID.
 func setupDriftQueryCloud(serviceIDFlag string) (*api.TuskClient, api.AuthOptions, string, error) {
+	// Ensure config is loaded with override support before Get() is called by SetupCloud
+	_ = config.Load(cfgFile, cfgOverrideFile)
+
 	client, authOptions, cfg, err := api.SetupCloud(context.Background(), false)
 	if err != nil {
 		return nil, api.AuthOptions{}, "", err

@@ -163,12 +163,16 @@ func Load(configFile string, overrideFiles ...string) error {
 		log.Debug("No config file found, using defaults and environment variables")
 	}
 
-	// Determine override file: --config-override flag takes precedence over TUSK_CONFIG_OVERRIDE env var
+	// Determine override file: --config-override flag takes precedence over TUSK_CONFIG_OVERRIDE env var.
+	// The env var fallback is only checked when the caller explicitly passes the overrideFiles arg
+	// (even if empty). Callers like ValidateConfigFile that pass no variadic arg won't trigger env
+	// var lookup, preventing TUSK_CONFIG_OVERRIDE from interfering with validation.
 	var overridePath string
-	if len(overrideFiles) > 0 && overrideFiles[0] != "" {
+	if len(overrideFiles) > 0 {
 		overridePath = overrideFiles[0]
-	} else if envOverridePath := os.Getenv("TUSK_CONFIG_OVERRIDE"); envOverridePath != "" {
-		overridePath = envOverridePath
+		if overridePath == "" {
+			overridePath = os.Getenv("TUSK_CONFIG_OVERRIDE")
+		}
 	}
 
 	if overridePath != "" {

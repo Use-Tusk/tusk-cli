@@ -69,7 +69,11 @@ func bindListFlags(cmd *cobra.Command) {
 func listTests(cmd *cobra.Command, args []string) error {
 	setupSignalHandling()
 
-	_ = config.Load(cfgFile, cfgOverrideFile)
+	if err := config.Load(cfgFile, cfgOverrideFile); err != nil {
+		if cfgOverrideFile != "" || os.Getenv("TUSK_CONFIG_OVERRIDE") != "" {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+	}
 	cfg, getConfigErr := config.Get()
 
 	executor := runner.NewExecutor()
@@ -124,7 +128,11 @@ func listTests(cmd *cobra.Command, args []string) error {
 		}
 		tests = runner.ConvertTraceTestsToRunnerTests(all)
 	} else {
-		_ = config.Load("", cfgOverrideFile)
+		if err := config.Load("", cfgOverrideFile); err != nil {
+			if cfgOverrideFile != "" || os.Getenv("TUSK_CONFIG_OVERRIDE") != "" {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+		}
 		cfg, getConfigErr := config.Get()
 
 		selected := traceDir

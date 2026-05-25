@@ -215,7 +215,8 @@ recording:
 
 	t.Setenv("TUSK_CONFIG_OVERRIDE", overrideFile)
 
-	require.NoError(t, Load(baseConfig))
+	// Pass explicit empty override to opt into env var fallback (simulates CLI invocation)
+	require.NoError(t, Load(baseConfig, ""))
 
 	cfg, err := Get()
 	require.NoError(t, err)
@@ -244,7 +245,8 @@ func TestTuskConfigOverrideEnvVarFileNotFound(t *testing.T) {
 
 	t.Setenv("TUSK_CONFIG_OVERRIDE", "/nonexistent/override.yaml")
 
-	err := Load("")
+	// Pass explicit empty override to opt into env var fallback (simulates CLI invocation)
+	err := Load("", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "config override file not found")
 }
@@ -420,13 +422,33 @@ service:
 
 	t.Setenv("TUSK_CONFIG_OVERRIDE", overrideFile)
 
-	// No explicit override arg — falls back to env var
-	require.NoError(t, Load(baseConfig))
+	// Pass explicit empty override to opt into env var fallback (simulates --config-override not set)
+	require.NoError(t, Load(baseConfig, ""))
 
 	cfg, err := Get()
 	require.NoError(t, err)
 	assert.Equal(t, "overridden", cfg.Service.Name)
 	assert.Equal(t, 3000, cfg.Service.Port)
+}
+
+func TestValidateConfigFileIgnoresTuskConfigOverrideEnvVar(t *testing.T) {
+	defer Invalidate()
+
+	tmpDir := t.TempDir()
+	baseConfig := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(baseConfig, []byte(`
+service:
+  name: test
+  port: 3000
+  start:
+    command: npm start
+`), 0o600))
+
+	// Set TUSK_CONFIG_OVERRIDE to a nonexistent file — ValidateConfigFile should NOT fail
+	t.Setenv("TUSK_CONFIG_OVERRIDE", "/nonexistent/override.yaml")
+
+	result := ValidateConfigFile(baseConfig)
+	assert.True(t, result.Valid, "ValidateConfigFile should not be affected by TUSK_CONFIG_OVERRIDE env var")
 }
 
 func TestValidateRejectsInvalidRecordingSamplingMode(t *testing.T) {
