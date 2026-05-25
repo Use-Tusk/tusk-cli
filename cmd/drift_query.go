@@ -28,6 +28,13 @@ func init() {
 
 // setupDriftQueryCloud sets up the API client and resolves the service ID.
 func setupDriftQueryCloud(serviceIDFlag string) (*api.TuskClient, api.AuthOptions, string, error) {
+	// Ensure config is loaded with override support before Get() is called by SetupCloud
+	if err := config.Load(cfgFile, cfgOverrideFile); err != nil {
+		if cfgOverrideFile != "" || os.Getenv("TUSK_CONFIG_OVERRIDE") != "" {
+			return nil, api.AuthOptions{}, "", fmt.Errorf("failed to load config: %w", err)
+		}
+	}
+
 	client, authOptions, cfg, err := api.SetupCloud(context.Background(), false)
 	if err != nil {
 		return nil, api.AuthOptions{}, "", err

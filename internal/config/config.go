@@ -131,9 +131,14 @@ type CoverageConfig struct {
 	StripPathPrefix string   `koanf:"strip_path_prefix"`
 }
 
-// Load loads the config file and applies environment overrides.
+// Load loads the config file, applies overrides, and applies environment overrides.
 // This function is idempotent - calling it multiple times will only load once.
-func Load(configFile string) error {
+//
+// Config precedence (highest wins):
+//  1. Environment variables (TUSK_*)
+//  2. Override file (from --config-override flag or TUSK_CONFIG_OVERRIDE env var)
+//  3. Base config file (.tusk/config.yaml)
+func Load(configFile string, overrideFiles ...string) error {
 	loadMutex.Lock()
 	defer loadMutex.Unlock()
 
@@ -158,6 +163,30 @@ func Load(configFile string) error {
 		log.Debug("No config file found, using defaults and environment variables")
 	}
 
+	// Determine override file: --config-override flag takes precedence over TUSK_CONFIG_OVERRIDE env var.
+	// The env var fallback is only checked when the caller explicitly passes the overrideFiles arg
+	// (even if empty). Callers like ValidateConfigFile that pass no variadic arg won't trigger env
+	// var lookup, preventing TUSK_CONFIG_OVERRIDE from interfering with validation.
+	var overridePath string
+	if len(overrideFiles) > 0 {
+		overridePath = overrideFiles[0]
+		if overridePath == "" {
+			overridePath = os.Getenv("TUSK_CONFIG_OVERRIDE")
+		}
+	}
+
+	if overridePath != "" {
+		if _, err := os.Stat(overridePath); err == nil { // #nosec G703 -- path from trusted flag/env var
+			if err := k.Load(file.Provider(overridePath), yaml.Parser()); err != nil {
+				return fmt.Errorf("error loading config override file %s: %w", overridePath, err)
+			}
+			log.Debug("Config override file loaded", "file", overridePath)
+			configFileFound = true
+		} else {
+			return fmt.Errorf("config override file not found: %s", overridePath)
+		}
+	}
+
 	// Support environment variable overrides for specific config keys
 	envOverrides := map[string]string{
 		"TUSK_TRACES_DIR":                         "traces.dir",
@@ -167,6 +196,9 @@ func Load(configFile string) error {
 		"TUSK_RESULTS_DIR":                        "results.dir",
 		"TUSK_RECORDING_SAMPLING_RATE":            "recording.sampling_rate",
 		"TUSK_RECORDING_SAMPLING_LOG_TRANSITIONS": "recording.sampling.log_transitions",
+		"TUSK_RECORDING_SAMPLING_MODE":            "recording.sampling.mode",
+		"TUSK_RECORDING_EXPORT_SPANS":             "recording.export_spans",
+		"TUSK_ENABLE_ENV_VAR_RECORDING":           "recording.enable_env_var_recording",
 	}
 
 	for envKey, configKey := range envOverrides {

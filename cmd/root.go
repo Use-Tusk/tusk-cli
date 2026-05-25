@@ -19,9 +19,10 @@ import (
 )
 
 var (
-	cfgFile     string
-	debug       bool
-	showVersion bool
+	cfgFile         string
+	cfgOverrideFile string
+	debug           bool
+	showVersion     bool
 
 	// Cleanup infrastructure
 	cleanupFuncs []func()
