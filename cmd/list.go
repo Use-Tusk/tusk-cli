@@ -69,7 +69,7 @@ func bindListFlags(cmd *cobra.Command) {
 func listTests(cmd *cobra.Command, args []string) error {
 	setupSignalHandling()
 
-	_ = config.Load(cfgFile)
+	_ = config.Load(cfgFile, cfgOverrideFile)
 	cfg, getConfigErr := config.Get()
 
 	executor := runner.NewExecutor()
@@ -124,7 +124,7 @@ func listTests(cmd *cobra.Command, args []string) error {
 		}
 		tests = runner.ConvertTraceTestsToRunnerTests(all)
 	} else {
-		_ = config.Load("")
+		_ = config.Load("", cfgOverrideFile)
 		cfg, getConfigErr := config.Get()
 
 		selected := traceDir

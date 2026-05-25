@@ -157,7 +157,7 @@ func runTests(cmd *cobra.Command, args []string) error {
 	executor := runner.NewExecutor()
 	executor.SetDebug(debug)
 
-	_ = config.Load(cfgFile)
+	_ = config.Load(cfgFile, cfgOverrideFile)
 	cfg, getConfigErr := config.Get()
 	if getConfigErr == nil && cfg.TestExecution.Concurrency > 0 {
 		executor.SetConcurrency(cfg.TestExecution.Concurrency)

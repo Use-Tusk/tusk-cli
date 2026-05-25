@@ -6,19 +6,31 @@ Where the CLI reads config from (highest precedence first):
 
 1. CLI flags (e.g., `--concurrency`, `--results-dir`, `--enable-service-logs`). See `--help` for each command for more details.
 2. Environment variables (prefix `TUSK_`)
-3. Explicit override file via `TUSK_CONFIG_OVERRIDE` env var (path to a YAML file)
-4. Local override file: `.tusk/local-config.yaml` or `.tusk/local-config.yml` (same directory as base config)
-5. Base config file (auto-discovered): `.tusk/config.yaml`, `.tusk/config.yml`, `tusk.yaml`, `tusk.yml`, or `~/.tusk/config.yaml`
+3. Config override file via `--config-override` flag or `TUSK_CONFIG_OVERRIDE` env var (flag takes precedence)
+4. Base config file (auto-discovered): `.tusk/config.yaml`, `.tusk/config.yml`, `tusk.yaml`, `tusk.yml`, or `~/.tusk/config.yaml`
 
 **✨ Run `tusk drift setup` in your service root directory to start an agent automatically create a config file based on your service.**
 
-## Local Config Overrides
+## Config Overrides
 
-For local development, you can create a `.tusk/local-config.yaml` (or `.tusk/local-config.yml`) file alongside your base `.tusk/config.yaml`. This file is merged on top of the base config, so you only need to specify the fields you want to override.
+You can provide a config override file that is merged on top of the base config. Only the fields you specify in the override file are changed; everything else is preserved from the base config.
 
-This is useful for local-only settings like disabling span export or changing the sampling mode without modifying the shared config file. **We recommend adding `.tusk/local-config.yaml` to your `.gitignore`.**
+This is useful for local-only settings like disabling span export or changing the sampling mode without modifying the shared config file.
 
-Example `.tusk/local-config.yaml`:
+**Using the `--config-override` flag:**
+```bash
+tusk drift run --config-override .tusk/local-config.yaml
+tusk drift list --config-override .tusk/local-config.yaml
+```
+
+**Using the `TUSK_CONFIG_OVERRIDE` env var:**
+```bash
+TUSK_CONFIG_OVERRIDE=.tusk/local-config.yaml tusk drift run
+```
+
+The `--config-override` flag takes precedence over the `TUSK_CONFIG_OVERRIDE` env var. Both are overridden by individual env vars (e.g., `TUSK_RECORDING_SAMPLING_MODE`).
+
+Example override file:
 
 ```yaml
 recording:
@@ -28,8 +40,6 @@ recording:
   export_spans: false
   enable_env_var_recording: false
 ```
-
-You can also set `TUSK_CONFIG_OVERRIDE` to an explicit file path to load as an override (takes precedence over `local-config.yaml` but is still overridden by env vars).
 
 ### Recording Environment Variable Overrides
 

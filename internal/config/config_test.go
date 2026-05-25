@@ -99,7 +99,7 @@ recording:
 	assert.False(t, *cfg.Recording.Sampling.LogTransitions)
 }
 
-func TestLocalOverrideFileMergesOnTopOfBaseConfig(t *testing.T) {
+func TestConfigOverrideFileMergesOnTopOfBaseConfig(t *testing.T) {
 	defer Invalidate()
 
 	tmpDir := t.TempDir()
@@ -122,9 +122,9 @@ recording:
   enable_env_var_recording: true
 `), 0o600))
 
-	// Local override - only overrides recording settings
-	localConfig := filepath.Join(tuskDir, "local-config.yaml")
-	require.NoError(t, os.WriteFile(localConfig, []byte(`
+	// Override file - only overrides recording settings
+	overrideFile := filepath.Join(tmpDir, "override.yaml")
+	require.NoError(t, os.WriteFile(overrideFile, []byte(`
 recording:
   sampling:
     mode: fixed
@@ -133,12 +133,12 @@ recording:
   enable_env_var_recording: false
 `), 0o600))
 
-	require.NoError(t, Load(baseConfig))
+	require.NoError(t, Load(baseConfig, overrideFile))
 
 	cfg, err := Get()
 	require.NoError(t, err)
 
-	// Recording settings should be overridden by local config
+	// Recording settings should be overridden
 	assert.Equal(t, "fixed", cfg.Recording.Sampling.Mode)
 	require.NotNil(t, cfg.Recording.Sampling.BaseRate)
 	assert.Equal(t, 1.0, *cfg.Recording.Sampling.BaseRate)
@@ -153,7 +153,7 @@ recording:
 	assert.Equal(t, "npm start", cfg.Service.Start.Command)
 }
 
-func TestLocalOverrideFileYmlExtension(t *testing.T) {
+func TestConfigOverrideFilePartialMerge(t *testing.T) {
 	defer Invalidate()
 
 	tmpDir := t.TempDir()
@@ -169,18 +169,18 @@ service:
     command: npm start
 `), 0o600))
 
-	// Use .yml extension for local override
-	localConfig := filepath.Join(tuskDir, "local-config.yml")
-	require.NoError(t, os.WriteFile(localConfig, []byte(`
+	// Override only changes one field
+	overrideFile := filepath.Join(tmpDir, "override.yml")
+	require.NoError(t, os.WriteFile(overrideFile, []byte(`
 service:
-  name: local-service
+  name: override-service
 `), 0o600))
 
-	require.NoError(t, Load(baseConfig))
+	require.NoError(t, Load(baseConfig, overrideFile))
 
 	cfg, err := Get()
 	require.NoError(t, err)
-	assert.Equal(t, "local-service", cfg.Service.Name)
+	assert.Equal(t, "override-service", cfg.Service.Name)
 	assert.Equal(t, 3000, cfg.Service.Port)
 }
 
@@ -231,6 +231,14 @@ recording:
 	assert.Equal(t, "base-service", cfg.Service.Name)
 }
 
+func TestConfigOverrideFileNotFound(t *testing.T) {
+	defer Invalidate()
+
+	err := Load("", "/nonexistent/override.yaml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "config override file not found")
+}
+
 func TestTuskConfigOverrideEnvVarFileNotFound(t *testing.T) {
 	defer Invalidate()
 
@@ -238,10 +246,10 @@ func TestTuskConfigOverrideEnvVarFileNotFound(t *testing.T) {
 
 	err := Load("")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "TUSK_CONFIG_OVERRIDE file not found")
+	assert.Contains(t, err.Error(), "config override file not found")
 }
 
-func TestTuskConfigOverrideBeatsLocalOverride(t *testing.T) {
+func TestConfigOverrideFlagBeatsEnvVar(t *testing.T) {
 	defer Invalidate()
 
 	tmpDir := t.TempDir()
@@ -260,31 +268,31 @@ recording:
     mode: adaptive
 `), 0o600))
 
-	// Local override sets mode to fixed
-	localConfig := filepath.Join(tuskDir, "local-config.yaml")
-	require.NoError(t, os.WriteFile(localConfig, []byte(`
+	// TUSK_CONFIG_OVERRIDE env var sets mode to fixed
+	envOverrideFile := filepath.Join(tmpDir, "env-override.yaml")
+	require.NoError(t, os.WriteFile(envOverrideFile, []byte(`
 recording:
   sampling:
     mode: fixed
 `), 0o600))
 
-	// TUSK_CONFIG_OVERRIDE re-sets it back to adaptive with different rate
-	overrideFile := filepath.Join(tmpDir, "env-override.yaml")
-	require.NoError(t, os.WriteFile(overrideFile, []byte(`
+	// --config-override flag sets mode back to adaptive with different rate
+	flagOverrideFile := filepath.Join(tmpDir, "flag-override.yaml")
+	require.NoError(t, os.WriteFile(flagOverrideFile, []byte(`
 recording:
   sampling:
     mode: adaptive
     base_rate: 0.5
 `), 0o600))
 
-	t.Setenv("TUSK_CONFIG_OVERRIDE", overrideFile)
+	t.Setenv("TUSK_CONFIG_OVERRIDE", envOverrideFile)
 
-	require.NoError(t, Load(baseConfig))
+	// Flag override (passed as second arg) beats TUSK_CONFIG_OVERRIDE env var
+	require.NoError(t, Load(baseConfig, flagOverrideFile))
 
 	cfg, err := Get()
 	require.NoError(t, err)
 
-	// TUSK_CONFIG_OVERRIDE wins over local-config.yaml
 	assert.Equal(t, "adaptive", cfg.Recording.Sampling.Mode)
 	require.NotNil(t, cfg.Recording.Sampling.BaseRate)
 	assert.Equal(t, 0.5, *cfg.Recording.Sampling.BaseRate)
@@ -371,8 +379,8 @@ recording:
   export_spans: true
 `), 0o600))
 
-	localConfig := filepath.Join(tuskDir, "local-config.yaml")
-	require.NoError(t, os.WriteFile(localConfig, []byte(`
+	overrideFile := filepath.Join(tmpDir, "override.yaml")
+	require.NoError(t, os.WriteFile(overrideFile, []byte(`
 recording:
   sampling:
     mode: fixed
@@ -382,7 +390,7 @@ recording:
 	t.Setenv("TUSK_RECORDING_SAMPLING_MODE", "adaptive")
 	t.Setenv("TUSK_RECORDING_EXPORT_SPANS", "false")
 
-	require.NoError(t, Load(baseConfig))
+	require.NoError(t, Load(baseConfig, overrideFile))
 
 	cfg, err := Get()
 	require.NoError(t, err)
@@ -391,27 +399,34 @@ recording:
 	assert.False(t, *cfg.Recording.ExportSpans)
 }
 
-func TestFindLocalOverrideFile(t *testing.T) {
+func TestConfigOverrideViaEnvVar(t *testing.T) {
+	defer Invalidate()
+
 	tmpDir := t.TempDir()
-	tuskDir := filepath.Join(tmpDir, ".tusk")
-	require.NoError(t, os.MkdirAll(tuskDir, 0o750))
+	baseConfig := filepath.Join(tmpDir, "config.yaml")
+	require.NoError(t, os.WriteFile(baseConfig, []byte(`
+service:
+  name: base
+  port: 3000
+  start:
+    command: npm start
+`), 0o600))
 
-	baseConfig := filepath.Join(tuskDir, "config.yaml")
-	require.NoError(t, os.WriteFile(baseConfig, []byte("service:\n  name: test"), 0o600))
+	overrideFile := filepath.Join(tmpDir, "override.yaml")
+	require.NoError(t, os.WriteFile(overrideFile, []byte(`
+service:
+  name: overridden
+`), 0o600))
 
-	// No local override file exists
-	assert.Equal(t, "", findLocalOverrideFile(baseConfig))
+	t.Setenv("TUSK_CONFIG_OVERRIDE", overrideFile)
 
-	// Create local-config.yaml
-	localYaml := filepath.Join(tuskDir, "local-config.yaml")
-	require.NoError(t, os.WriteFile(localYaml, []byte("service:\n  name: local"), 0o600))
-	assert.Equal(t, localYaml, findLocalOverrideFile(baseConfig))
+	// No explicit override arg — falls back to env var
+	require.NoError(t, Load(baseConfig))
 
-	// Remove .yaml and create .yml
-	require.NoError(t, os.Remove(localYaml))
-	localYml := filepath.Join(tuskDir, "local-config.yml")
-	require.NoError(t, os.WriteFile(localYml, []byte("service:\n  name: local"), 0o600))
-	assert.Equal(t, localYml, findLocalOverrideFile(baseConfig))
+	cfg, err := Get()
+	require.NoError(t, err)
+	assert.Equal(t, "overridden", cfg.Service.Name)
+	assert.Equal(t, 3000, cfg.Service.Port)
 }
 
 func TestValidateRejectsInvalidRecordingSamplingMode(t *testing.T) {

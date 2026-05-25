@@ -131,15 +131,14 @@ type CoverageConfig struct {
 	StripPathPrefix string   `koanf:"strip_path_prefix"`
 }
 
-// Load loads the config file, applies local overrides, and applies environment overrides.
+// Load loads the config file, applies overrides, and applies environment overrides.
 // This function is idempotent - calling it multiple times will only load once.
 //
 // Config precedence (highest wins):
 //  1. Environment variables (TUSK_*)
-//  2. Override file from TUSK_CONFIG_OVERRIDE env var
-//  3. Local override file (.tusk/local-config.yaml or .tusk/local-config.yml)
-//  4. Base config file (.tusk/config.yaml)
-func Load(configFile string) error {
+//  2. Override file (from --config-override flag or TUSK_CONFIG_OVERRIDE env var)
+//  3. Base config file (.tusk/config.yaml)
+func Load(configFile string, overrideFiles ...string) error {
 	loadMutex.Lock()
 	defer loadMutex.Unlock()
 
@@ -159,30 +158,28 @@ func Load(configFile string) error {
 			return fmt.Errorf("error loading config file: %w", err)
 		}
 		log.Debug("Config file loaded", "file", configFile)
-
-		// Load local override file (same directory as base config)
-		if localOverride := findLocalOverrideFile(configFile); localOverride != "" {
-			if err := k.Load(file.Provider(localOverride), yaml.Parser()); err != nil {
-				log.ServiceLog(fmt.Sprintf("Failed to load local override file: %s. Error: %s", localOverride, err))
-				return fmt.Errorf("error loading local override file: %w", err)
-			}
-			log.Debug("Local override file loaded", "file", localOverride)
-		}
 	} else {
 		configFileFound = false
 		log.Debug("No config file found, using defaults and environment variables")
 	}
 
-	// Load explicit override file from TUSK_CONFIG_OVERRIDE env var
-	if overridePath := os.Getenv("TUSK_CONFIG_OVERRIDE"); overridePath != "" {
-		if _, err := os.Stat(overridePath); err == nil { // #nosec G703 -- path from trusted env var
+	// Determine override file: --config-override flag takes precedence over TUSK_CONFIG_OVERRIDE env var
+	var overridePath string
+	if len(overrideFiles) > 0 && overrideFiles[0] != "" {
+		overridePath = overrideFiles[0]
+	} else if envOverridePath := os.Getenv("TUSK_CONFIG_OVERRIDE"); envOverridePath != "" {
+		overridePath = envOverridePath
+	}
+
+	if overridePath != "" {
+		if _, err := os.Stat(overridePath); err == nil { // #nosec G703 -- path from trusted flag/env var
 			if err := k.Load(file.Provider(overridePath), yaml.Parser()); err != nil {
-				return fmt.Errorf("error loading TUSK_CONFIG_OVERRIDE file %s: %w", overridePath, err)
+				return fmt.Errorf("error loading config override file %s: %w", overridePath, err)
 			}
-			log.Debug("TUSK_CONFIG_OVERRIDE file loaded", "file", overridePath)
+			log.Debug("Config override file loaded", "file", overridePath)
 			configFileFound = true
 		} else {
-			return fmt.Errorf("TUSK_CONFIG_OVERRIDE file not found: %s", overridePath)
+			return fmt.Errorf("config override file not found: %s", overridePath)
 		}
 	}
 
@@ -625,26 +622,6 @@ func findConfigFile() string {
 	return ""
 }
 
-// findLocalOverrideFile looks for a local override config file in the same directory
-// as the base config file. It checks for local-config.yaml and local-config.yml.
-// This file is intended for user-specific local overrides (e.g., recording settings
-// for local development) and should typically be added to .gitignore.
-func findLocalOverrideFile(baseConfigPath string) string {
-	dir := filepath.Dir(baseConfigPath)
-
-	localPaths := []string{
-		filepath.Join(dir, "local-config.yaml"),
-		filepath.Join(dir, "local-config.yml"),
-	}
-
-	for _, p := range localPaths {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-
-	return ""
-}
 
 // Invalidate clears all cached config state, forcing a reload on next Get().
 // Used when updating the config file and for testing.
