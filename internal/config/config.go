@@ -502,7 +502,7 @@ func CheckUnknownKeys() []string {
 func getValidKeys(t reflect.Type, prefix string) []string {
 	var keys []string
 
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -526,7 +526,7 @@ func getValidKeys(t reflect.Type, prefix string) []string {
 
 		// Recurse into nested structs
 		fieldType := field.Type
-		if fieldType.Kind() == reflect.Ptr {
+		if fieldType.Kind() == reflect.Pointer {
 			fieldType = fieldType.Elem()
 		}
 		if fieldType.Kind() == reflect.Struct {
